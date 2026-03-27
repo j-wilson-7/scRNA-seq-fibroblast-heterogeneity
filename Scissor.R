@@ -812,6 +812,9 @@ mytheme3 = list(
 
 genes <- c("ASPN", "POSTN", "CTHRC1", "ADAM12", "TGFBI", "COL1A1")
 
+# Relevel identities in the order: Background, Scissor-, Scissor+
+Idents(adams_sc_dataset) <- factor(Idents(adams_sc_dataset), levels = c("0", "2", "1"))
+
 VlnPlot(adams_sc_dataset, features = genes,
         cols=c("grey", "blue","red"),
         pt.size = 0) &
@@ -872,9 +875,5 @@ print(table_scissor_1_ipf_orig)
 # If you want the number of UNIQUE IPF donors (not cells)
 unique_ipf_donors <- length(unique(scissor_1_ipf$orig.ident))
 print(unique_ipf_donors)
-
-
-
-
 
 
