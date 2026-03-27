@@ -255,7 +255,104 @@ infos3 <- Scissor(TGF_bulk_dataset_crRICTOR, habermann_sc_dataset, phenotype_crR
                   family = "binomial", Save_file = "Scissor_crRICTOR_Habermann.RData")
 
 
-#Visualisation when using Adams as scRNA-seq reference:
+
+
+############### Bulk RNA-Seq from Ng-Blichfeldt JP et al.
+
+## Prepare the count data > only do this once
+# Load raw read counts
+setwd("~/Documents/Chambers/COSBI")
+TGF_bulk_dataset <- read.table("Gosens RNAseq Gene Level v75.txt", 
+                               header = TRUE,
+                               sep = "\t")
+rownames(TGF_bulk_dataset) <- TGF_bulk_dataset[,1]
+TGF_bulk_dataset <- TGF_bulk_dataset[,-1]
+
+# Now convert to a numeric matrix whilst retaining rownames
+gene_ids <- rownames(TGF_bulk_dataset)
+TGF_bulk_dataset <- apply(TGF_bulk_dataset, 2, function(x) as.numeric(trimws(x)))
+TGF_bulk_dataset <- as.matrix(TGF_bulk_dataset)
+rownames(TGF_bulk_dataset) <- gene_ids
+
+
+# Add gene symbols
+anno2 <- mapIds(org.Hs.eg.db,keys=rownames(TGF_bulk_dataset),
+                column=c("SYMBOL"),
+                keytype="ENSEMBL",
+                multiVals = "first")
+rownames(TGF_bulk_dataset) <- anno2
+
+# Remove rows with NA gene symbols
+TGF_bulk_dataset <- TGF_bulk_dataset[!is.na(rownames(TGF_bulk_dataset)), ]
+
+# Remove duplicated gene names (keeping the first occurrence)
+TGF_bulk_dataset <- TGF_bulk_dataset[!duplicated(rownames(TGF_bulk_dataset)), ]
+
+
+# Remove samples we don't need
+TGF_bulk_dataset <- TGF_bulk_dataset[, -c(2, 4, 6, 8, 10, 12, 14, 16)]
+# Remove column names: Odd numbers are control, even numbers are TGF
+colnames(TGF_bulk_dataset) <- paste(1:ncol(TGF_bulk_dataset))
+
+# Normalise the counts using DESeq2
+library(DESeq2)
+condition <- factor(c("Control", "TGF", "Control", "TGF", 
+                      "Control", "TGF", "Control", "TGF"))
+colData <- data.frame(row.names = colnames(TGF_bulk_dataset),
+                      condition = condition)
+dds <- DESeqDataSetFromMatrix(countData = TGF_bulk_dataset,
+                              colData = colData,
+                              design = ~ condition)
+
+# Filter out genes with very low counts
+dds <- dds[rowSums(counts(dds)) > 1, ]
+
+# Run DESeq2
+dds <- DESeq(dds)
+
+# Extract normalised counts
+norm_counts <- counts(dds, normalized = TRUE)
+write.csv(norm_counts, file = "Melanie_normalised_counts.csv", row.names = TRUE)
+
+
+## Running Scissor
+
+# To load back in normalised counts
+norm_counts <- read.csv("normalized_counts.csv", row.names = 1, check.names = FALSE)
+norm_counts <- as.matrix(norm_counts)
+
+# Prep phenotype
+phenotype_Mel <- matrix(
+  rep(c(0, 1), times = 4),  # repeats 0,1 pattern 4 times
+  ncol = 1
+)
+colnames(phenotype_Mel) <- c("Phenotype")
+tag <- c('Control', 'TGF-β1')
+
+# All four donors together
+infos6 <- Scissor(TGF_bulk_dataset, adams_sc_dataset, phenotype_Mel, tag = tag, 
+                  alpha = 0.05, 
+                  family = "binomial", Save_file = "Scissor_Melanie_Adams.RData")
+
+# Visualise on UMAP. Red are scissor + (TGF-B1 associated) and blue are scissor - (control associated)
+Scissor_select <- rep(0, ncol(adams_sc_dataset))
+names(Scissor_select) <- colnames(adams_sc_dataset)
+Scissor_select[infos6$Scissor_pos] <- 1
+Scissor_select[infos6$Scissor_neg] <- 2
+adams_sc_dataset <- AddMetaData(adams_sc_dataset, metadata = Scissor_select, col.name = "scissor")
+DimPlot(adams_sc_dataset, reduction = 'umap', group.by = 'scissor', cols = c('#DDDDDD','#a61e4aff','#1ea66cff'), pt.size = 1.2, order = c(2,1))
+
+#Use FindMarkers function in Seurat to look at the differentially expressed genes between Scissor - and scissor + cells. Metadata is called "scissor"
+Idents(adams_sc_dataset) <- adams_sc_dataset@meta.data$'scissor' #Change identity so it now uses scissor as the identity for each cell
+tgf.markers = FindMarkers(adams_sc_dataset, only.pos = FALSE, ident.1=c(1), min.pct = 0.25, logfc.threshold = 0.25)
+ctrl.markers = FindMarkers(adams_sc_dataset, only.pos = FALSE, ident.1=c(2), min.pct = 0.25, logfc.threshold = 0.25)
+
+write.csv(tgf.markers, file = "Melanie_TGF_scissorpos_markers.csv")
+write.csv(ctrl.markers, file = "Melanie_MC_scissorneg_markers.csv")
+
+
+
+########## Visualisation when using Adams as scRNA-seq reference:
 #Visualise on UMAP. Red are scissor + (TGF-B1 associated) and blue are scissor - (control associated)
 Scissor_select <- rep(0, ncol(adams_sc_dataset))
 names(Scissor_select) <- colnames(adams_sc_dataset)
